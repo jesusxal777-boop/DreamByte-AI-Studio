@@ -10,6 +10,7 @@ struct VideoProject: Identifiable, Codable, Hashable {
     var duration: Double
     var trimStart: Double
     var trimEnd: Double
+    var timelineClips: [TimelineClip]
 
     init(name: String) {
         id = UUID()
@@ -20,6 +21,22 @@ struct VideoProject: Identifiable, Codable, Hashable {
         duration = 0
         trimStart = 0
         trimEnd = 0
+        timelineClips = []
+    }
+
+    enum CodingKeys: String, CodingKey { case id, name, createdAt, modifiedAt, sourceVideoFilename, duration, trimStart, trimEnd, timelineClips }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decodeIfPresent(UUID.self, forKey: .id) ?? UUID()
+        name = try c.decodeIfPresent(String.self, forKey: .name) ?? "Proyecto sin título"
+        createdAt = try c.decodeIfPresent(Date.self, forKey: .createdAt) ?? Date()
+        modifiedAt = try c.decodeIfPresent(Date.self, forKey: .modifiedAt) ?? Date()
+        sourceVideoFilename = try c.decodeIfPresent(String.self, forKey: .sourceVideoFilename)
+        duration = try c.decodeIfPresent(Double.self, forKey: .duration) ?? 0
+        trimStart = try c.decodeIfPresent(Double.self, forKey: .trimStart) ?? 0
+        trimEnd = try c.decodeIfPresent(Double.self, forKey: .trimEnd) ?? duration
+        timelineClips = try c.decodeIfPresent([TimelineClip].self, forKey: .timelineClips) ?? []
     }
 }
 
