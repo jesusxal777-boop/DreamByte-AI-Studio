@@ -156,7 +156,7 @@ struct ProjectEditorView: View {
                 do {
                     guard let data = try await item.loadTransferable(type: Data.self) else { throw importFailure("No se pudo leer la imagen seleccionada.") }
                     let ext = item.supportedContentTypes.first?.preferredFilenameExtension ?? "jpg"
-                    await MainActor.run { importAssetData(data, extension: ext, kind: .image, label: "Imagen") ; selectedImage = nil }
+                    await MainActor.run { importAssetData(data, fileExtension: ext, kind: .image, label: "Imagen") ; selectedImage = nil }
                 } catch { await MainActor.run { importError = error.localizedDescription; selectedImage = nil } }
             }
         }
@@ -325,7 +325,7 @@ struct ProjectEditorView: View {
         return folder
     }
 
-    private func importAssetData(_ data: Data, extension ext: String, kind: TimelineClipKind, label: String) {
+    private func importAssetData(_ data: Data, fileExtension ext: String, kind: TimelineClipKind, label: String) {
         do {
             let filename = "\(UUID().uuidString).\(ext)"
             let destination = try mediaFolder().appendingPathComponent(filename)
