@@ -10,6 +10,7 @@ settings:
     PRODUCT_BUNDLE_IDENTIFIER: studios.dreambyte.ai-studio
     INFOPLIST_KEY_CFBundleDisplayName: DreamByte AI Studio
     INFOPLIST_KEY_LSApplicationCategoryType: public.app-category.video
+    INFOPLIST_KEY_NSMicrophoneUsageDescription: DreamByte AI Studio necesita el micrófono para grabar narraciones y audio en tu proyecto.
     GENERATE_INFOPLIST_FILE: YES
 targets:
   DreamByteAIStudio:
