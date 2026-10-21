@@ -1,23 +1,50 @@
-name: iOS Build
+
+name: DreamByte AI Studio - iOS Build
 
 on:
   push:
     branches: [main, "feature/**"]
-  pull_request:
-    branches: [main]
   workflow_dispatch:
 
 jobs:
-  build-ios-simulator:
+  build-ios:
     runs-on: macos-15
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
       - name: Select Xcode
-        run: xcode-select -p && xcodebuild -version
+        run: xcodebuild -version
+
       - name: Install XcodeGen
         run: brew install xcodegen
+
       - name: Generate Xcode project
         run: xcodegen generate
-      - name: Build for iOS Simulator (no signing)
-        run: xcodebuild -project DreamByteAIStudio.xcodeproj -scheme DreamByteAIStudio -sdk iphonesimulator -configuration Debug CODE_SIGNING_ALLOWED=NO build
+
+      - name: Build for iOS device
+        run: |
+          xcodebuild \
+            -project DreamByteAIStudio.xcodeproj \
+            -scheme DreamByteAIStudio \
+            -sdk iphoneos \
+            -configuration Release \
+            -derivedDataPath build \
+            CODE_SIGNING_ALLOWED=NO \
+            build
+
+      - name: Package unsigned IPA
+        run: |
+          mkdir -p Payload
+          APP_PATH="build/Build/Products/Release-iphoneos/DreamByteAIStudio.app"
+          test -d "$APP_PATH"
+          cp -R "$APP_PATH" Payload/
+          zip -r DreamByteAIStudio-unsigned.ipa Payload
+
+      - name: Upload IPA artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: DreamByteAIStudio-unsigned-ipa
+          path: DreamByteAIStudio-unsigned.ipa
+          retention-days: 14
