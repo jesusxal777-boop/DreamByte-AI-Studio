@@ -120,7 +120,7 @@ struct ProjectEditorView: View {
         }
         .toolbar(.hidden, for: .navigationBar).preferredColorScheme(.dark)
         .fileImporter(isPresented: $showingImporter, allowedContentTypes: [.movie, .video], allowsMultipleSelection: false, onCompletion: handleImport)
-        .photosPicker(isPresented: $showingPhotoPicker, selection: $selectedPhoto, matching: .videos, photoLibrary: .shared)
+        .photosPicker(isPresented: $showingPhotoPicker, selection: $selectedPhoto, matching: .videos)
         .onChange(of: selectedPhoto) { _, item in
             guard let item else { return }
             Task {
