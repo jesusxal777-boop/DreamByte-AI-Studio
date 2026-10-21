@@ -29,6 +29,8 @@ struct ProjectEditorView: View {
     @State private var audioRecorder: AVAudioRecorder?
     @State private var isRecording = false
     @State private var selectedClipID: UUID?
+    @State private var isExporting = false
+    @State private var exportedURL: URL?
     @State private var importError: String?
     @State private var isPlaying = false
     let onUpdate: (VideoProject) -> Void
@@ -59,6 +61,16 @@ struct ProjectEditorView: View {
                             Text(project.name).font(.system(size: 25, weight: .bold, design: .rounded)).foregroundStyle(.white)
                         }
                         Spacer()
+                        if let exportedURL {
+                            ShareLink(item: exportedURL) {
+                                Image(systemName: "square.and.arrow.up").font(.title3.weight(.semibold)).foregroundStyle(.white)
+                                    .frame(width: 44, height: 44).background(accent.opacity(0.3), in: RoundedRectangle(cornerRadius: 14))
+                            }
+                        }
+                        Button { exportTimeline() } label: {
+                            if isExporting { ProgressView().tint(.white).frame(width: 44, height: 44) }
+                            else { Image(systemName: "film.stack").font(.title3.weight(.semibold)).foregroundStyle(.white).frame(width: 44, height: 44).background(accent.opacity(0.3), in: RoundedRectangle(cornerRadius: 14)) }
+                        }.disabled(isExporting || mediaURL == nil)
                         Button { showingImporter = true } label: {
                             Image(systemName: "plus.rectangle.on.folder").font(.title3.weight(.semibold)).foregroundStyle(.white)
                                 .frame(width: 44, height: 44).background(.white.opacity(0.08), in: RoundedRectangle(cornerRadius: 14))
@@ -174,7 +186,7 @@ struct ProjectEditorView: View {
                 Spacer()
                 Text("\(project.timelineClips.count) clips").font(.caption.monospacedDigit()).foregroundStyle(accent)
             }
-            Text("Los medios se organizan por pistas. Selecciona un clip para quitarlo.")
+            Text("Selecciona un clip para editar posición, duración y volumen. El botón Exportar mezcla el vídeo base y el audio.")
                 .font(.caption).foregroundStyle(.white.opacity(0.55))
             ForEach(0..<4, id: \.self) { trackIndex in
                 HStack(alignment: .top, spacing: 9) {
@@ -184,7 +196,8 @@ struct ProjectEditorView: View {
                     }.frame(width: 60).padding(.top, 8)
                     ScrollView(.horizontal) {
                         HStack(spacing: 7) {
-                            ForEach(project.timelineClips.filter { $0.trackIndex == trackIndex }) { clip in
+                            ForEach(project.timelineClips.filter { $0.trackIndex == trackIndex }.sorted { $0.startTime < $1.startTime }) { clip in
+                                if clip.startTime > 0 { Spacer(minLength: 0).frame(width: min(1200, CGFloat(clip.startTime) * 13)) }
                                 Button {
                                     selectedClipID = clip.id
                                 } label: {
@@ -205,18 +218,47 @@ struct ProjectEditorView: View {
                 }
             }
             if let selected = project.timelineClips.first(where: { $0.id == selectedClipID }) {
-                HStack {
-                    VStack(alignment: .leading, spacing: 3) {
-                        Text(selected.label).font(.subheadline.weight(.semibold)).foregroundStyle(.white)
-                        Text("\(selected.kind.label) · \(formatTime(selected.startTime)) · \(formatTime(selected.duration))").font(.caption).foregroundStyle(.white.opacity(0.55))
+                VStack(alignment: .leading, spacing: 12) {
+                    HStack {
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text("Inspector de clip").font(.caption.weight(.heavy)).foregroundStyle(accent)
+                            Text(selected.label).font(.subheadline.weight(.semibold)).foregroundStyle(.white).lineLimit(1)
+                        }
+                        Spacer()
+                        Button(role: .destructive) {
+                            project.timelineClips.removeAll { $0.id == selected.id }
+                            selectedClipID = nil
+                            onUpdate(project)
+                        } label: { Label("Eliminar", systemImage: "trash").font(.caption.weight(.semibold)) }
                     }
-                    Spacer()
-                    Button(role: .destructive) {
-                        project.timelineClips.removeAll { $0.id == selected.id }
-                        selectedClipID = nil
-                        onUpdate(project)
-                    } label: { Label("Eliminar", systemImage: "trash").font(.caption.weight(.semibold)) }
-                }.padding(10).background(.white.opacity(0.04), in: RoundedRectangle(cornerRadius: 10))
+                    VStack(alignment: .leading, spacing: 5) {
+                        HStack { Text("Posición"); Spacer(); Text(formatTime(selected.startTime)).monospacedDigit() }
+                            .font(.caption).foregroundStyle(.white.opacity(0.75))
+                        Slider(value: clipDoubleBinding(selected.id, keyPath: \.startTime), in: 0...max(60, project.duration), step: 0.1).tint(accent)
+                    }
+                    VStack(alignment: .leading, spacing: 5) {
+                        HStack { Text("Duración"); Spacer(); Text(formatTime(selected.duration)).monospacedDigit() }
+                            .font(.caption).foregroundStyle(.white.opacity(0.75))
+                        Slider(value: clipDoubleBinding(selected.id, keyPath: \.duration), in: 0.2...max(60, project.duration), step: 0.1).tint(accent)
+                    }
+                    if selected.kind == .audio {
+                        VStack(alignment: .leading, spacing: 5) {
+                            HStack { Text("Volumen"); Spacer(); Text("\(Int(selected.volume * 100))%") }
+                                .font(.caption).foregroundStyle(.white.opacity(0.75))
+                            Slider(value: clipDoubleBinding(selected.id, keyPath: \.volume), in: 0...1, step: 0.01).tint(.green)
+                        }
+                    }
+                    if selected.kind == .text || selected.kind == .subtitle || selected.kind == .sticker || selected.kind == .effect || selected.kind == .transition {
+                        TextField("Contenido o nombre", text: clipTextBinding(selected.id))
+                            .textFieldStyle(.roundedBorder)
+                    }
+                    HStack(spacing: 10) {
+                        Button { updateClip(selected.id) { $0.startTime = max(0, $0.startTime - 1) } } label: { Label("−1 s", systemImage: "backward.end.fill").font(.caption) }
+                        Button { updateClip(selected.id) { $0.startTime += 1 } } label: { Label("+1 s", systemImage: "forward.end.fill").font(.caption) }
+                        Spacer()
+                        Text("\(selected.kind.label) · Pista \(selected.trackIndex + 1)").font(.caption2).foregroundStyle(.white.opacity(0.45))
+                    }.buttonStyle(.bordered).tint(accent)
+                }.padding(12).background(.white.opacity(0.04), in: RoundedRectangle(cornerRadius: 12))
             }
             if isRecording {
                 Label("Grabando voz… toca Grabar voz otra vez para terminar", systemImage: "record.circle.fill").font(.caption.weight(.semibold)).foregroundStyle(.red)
@@ -224,6 +266,97 @@ struct ProjectEditorView: View {
         }
         .padding(15).background(panel, in: RoundedRectangle(cornerRadius: 20))
         .overlay(RoundedRectangle(cornerRadius: 20).stroke(.white.opacity(0.07), lineWidth: 1))
+    }
+
+    private func updateClip(_ id: UUID, mutate: (inout TimelineClip) -> Void) {
+        guard let index = project.timelineClips.firstIndex(where: { $0.id == id }) else { return }
+        mutate(&project.timelineClips[index])
+        project.timelineClips[index].startTime = max(0, project.timelineClips[index].startTime)
+        project.timelineClips[index].duration = max(0.2, project.timelineClips[index].duration)
+        project.timelineClips[index].volume = min(1, max(0, project.timelineClips[index].volume))
+        onUpdate(project)
+    }
+
+    private func clipDoubleBinding(_ id: UUID, keyPath: WritableKeyPath<TimelineClip, Double>) -> Binding<Double> {
+        Binding(
+            get: { project.timelineClips.first(where: { $0.id == id }).map { $0[keyPath: keyPath] } ?? 0 },
+            set: { newValue in updateClip(id) { $0[keyPath: keyPath] = newValue } }
+        )
+    }
+
+    private func clipTextBinding(_ id: UUID) -> Binding<String> {
+        Binding(
+            get: { project.timelineClips.first(where: { $0.id == id }).map { $0.text ?? $0.label } ?? "" },
+            set: { newValue in updateClip(id) { $0.text = newValue; $0.label = newValue } }
+        )
+    }
+
+    private func exportTimeline() {
+        guard !isExporting, let sourceURL = mediaURL else { return }
+        isExporting = true
+        exportedURL = nil
+        Task {
+            do {
+                let source = AVURLAsset(url: sourceURL)
+                let videoTracks = try await source.loadTracks(withMediaType: .video)
+                guard let sourceVideoTrack = videoTracks.first else { throw importFailure("El vídeo principal no contiene una pista de vídeo compatible.") }
+                let sourceDuration = try await source.load(.duration).seconds
+                let start = min(max(0, project.trimStart), max(0, sourceDuration - 0.1))
+                let end = min(max(start + 0.1, project.trimEnd), sourceDuration)
+                let duration = max(0.1, end - start)
+                let composition = AVMutableComposition()
+                guard let outputVideo = composition.addMutableTrack(withMediaType: .video, preferredTrackID: kCMPersistentTrackID_Invalid) else {
+                    throw importFailure("No se pudo crear la pista de vídeo de salida.")
+                }
+                try outputVideo.insertTimeRange(CMTimeRange(start: CMTime(seconds: start, preferredTimescale: 600), duration: CMTime(seconds: duration, preferredTimescale: 600)), of: sourceVideoTrack, at: .zero)
+                var mixParameters: [AVAudioMixInputParameters] = []
+                let folder = try mediaFolder()
+                for clip in project.timelineClips where clip.kind == .audio {
+                    guard let filename = clip.filename else { continue }
+                    let audioURL = folder.appendingPathComponent(filename)
+                    guard FileManager.default.fileExists(atPath: audioURL.path) else { continue }
+                    let audioAsset = AVURLAsset(url: audioURL)
+                    guard let sourceAudio = try await audioAsset.loadTracks(withMediaType: .audio).first else { continue }
+                    let audioDuration = try await audioAsset.load(.duration).seconds
+                    let clipDuration = min(max(0.1, clip.duration), audioDuration)
+                    let insertionStart = max(0, clip.startTime)
+                    guard insertionStart < duration else { continue }
+                    let usableDuration = min(clipDuration, duration - insertionStart)
+                    guard let outputAudio = composition.addMutableTrack(withMediaType: .audio, preferredTrackID: kCMPersistentTrackID_Invalid) else { continue }
+                    try outputAudio.insertTimeRange(CMTimeRange(start: .zero, duration: CMTime(seconds: usableDuration, preferredTimescale: 600)), of: sourceAudio, at: CMTime(seconds: insertionStart, preferredTimescale: 600))
+                    let parameters = AVMutableAudioMixInputParameters(track: outputAudio)
+                    parameters.setVolume(Float(clip.volume), at: .zero)
+                    mixParameters.append(parameters)
+                }
+                let outputURL = FileManager.default.temporaryDirectory.appendingPathComponent("DreamByte-Export-\(UUID().uuidString).mp4")
+                guard let exporter = AVAssetExportSession(asset: composition, presetName: AVAssetExportPresetHighestQuality) else {
+                    throw importFailure("No se pudo iniciar el exportador de vídeo.")
+                }
+                exporter.outputURL = outputURL
+                exporter.outputFileType = .mp4
+                exporter.shouldOptimizeForNetworkUse = true
+                if !mixParameters.isEmpty {
+                    let audioMix = AVMutableAudioMix()
+                    audioMix.inputParameters = mixParameters
+                    exporter.audioMix = audioMix
+                }
+                exporter.exportAsynchronously {
+                    DispatchQueue.main.async {
+                        isExporting = false
+                        if exporter.status == .completed {
+                            exportedURL = outputURL
+                        } else {
+                            importError = exporter.error?.localizedDescription ?? "La exportación no se pudo completar."
+                        }
+                    }
+                }
+            } catch {
+                await MainActor.run {
+                    isExporting = false
+                    importError = error.localizedDescription
+                }
+            }
+        }
     }
 
     private func trackName(_ index: Int) -> String {
