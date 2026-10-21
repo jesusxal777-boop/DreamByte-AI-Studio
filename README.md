@@ -1,45 +1,30 @@
 # DreamByte AI Studio
 
-**An iOS-first AI-assisted video editor by DreamByte Studios.**
+DreamByte AI Studio is an iPad/iPhone-first video editing project by DreamByte Studios.
 
-DreamByte AI Studio aims to make video editing approachable through a native iOS/iPadOS experience, local editing tools, and optional AI-assisted workflows.
+## Current development stage
 
-## Planned features
+The `feature/ios-foundation` branch includes an early native SwiftUI foundation:
+- Project-library home screen with responsive grid, search, and filters.
+- A prominent **Crear proyecto** action that becomes a compact floating plus button after scrolling.
+- Local persistence for project metadata.
+- An editor foundation with local video import, AVKit preview, and saved manual in/out range controls.
+- User-managed OpenRouter and Gemini API-key settings stored in iOS Keychain.
 
-- Native SwiftUI interface designed for iPhone and iPad.
-- Import and preview media using Apple's media frameworks.
-- Non-destructive timeline editing, splitting, trimming, and reversible cuts.
-- On-device silence detection with adjustable sensitivity and reviewable suggestions.
-- MP4 export through supported Apple media APIs.
-- Optional OpenRouter integration for edit suggestions, cuts, and effects.
-- Optional Google Gemini integration for motion graphics and animated titles.
-- A versioned `.dbedit` project format.
-- Future Android and desktop support may be considered after the iOS foundation.
+**This is not a finished editor.** Multi-clip timeline editing, exported trimmed media, audio tools, and AI provider requests are not yet implemented. The trim sliders currently save an edit range; they do not create an exported file.
 
-## Project status
+## Editing without AI
 
-Early-stage project. Features are planned, not promised to exist yet. The repository will document implemented features and known limitations as development progresses.
+The core editor is designed to work independently of AI providers. Importing and previewing media and preparing manual edits should remain available without API keys. AI-assisted decisions and motion graphics will be optional tools.
 
-## API keys and privacy
+## Build
 
-AI integrations are optional. Never commit API keys, tokens, signing certificates, provisioning profiles, or other secrets. API keys should be stored securely on-device during local development. A public app that ships a shared provider key would require a secure backend proxy; a key embedded in an app can be extracted. Review each provider's current pricing, quotas, privacy terms, and model availability before use.
+The iOS project is generated with XcodeGen from `project.yml`. GitHub Actions can attempt an unsigned simulator build on macOS.
 
-## Build target
+## API key safety
 
-The first target is iOS/iPadOS using Swift and SwiftUI, with Xcode and the Apple SDKs. Building and signing iOS apps requires a compatible macOS/Xcode environment. Installation and signing are handled separately by the user.
+Do not add shared provider keys to source code, build settings, or commits. Users supply their own keys. Keychain reduces exposure but does not guarantee protection on a compromised or instrumented device. API usage may incur provider charges.
 
 ## License
 
-This repository uses the **DreamByte Studios Non-Commercial License** in [`LICENSE`](LICENSE). You may study, modify, and share the project for non-commercial purposes under its conditions, but you may not sell it or use it commercially without prior written permission from DreamByte Studios. This is a source-available, non-commercial license; it is **not an OSI-approved open-source license**.
-
-## Ownership and third-party components
-
-Unless a file states otherwise, original project code and branding are © DreamByte Studios. Third-party libraries, SDKs, models, and services remain subject to their own licenses and terms. Do not assume this license grants rights to third-party assets or services.
-
-## Contributions
-
-By submitting a contribution, you confirm you have the right to submit it and agree that it will be distributed under this repository's license, unless a separate written agreement says otherwise.
-
-## Disclaimer
-
-This project is provided as-is, without warranty. It is not affiliated with or endorsed by OpenAI, OpenRouter, Google, Apple, or other third-party providers.
+See [LICENSE](LICENSE). This project currently uses a custom non-commercial license; it is not an OSI-approved open-source license.
