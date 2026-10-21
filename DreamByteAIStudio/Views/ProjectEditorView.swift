@@ -176,15 +176,15 @@ struct ProjectEditorView: View {
             }
             Text("Los medios se organizan por pistas. Selecciona un clip para quitarlo.")
                 .font(.caption).foregroundStyle(.white.opacity(0.55))
-            ForEach([(0, "VÍDEO", "film"), (1, "AUDIO", "waveform"), (2, "IMÁGENES", "photo"), (3, "TEXTO / FX", "textformat")], id: \.0) { track in
+            ForEach(0..<4, id: \.self) { trackIndex in
                 HStack(alignment: .top, spacing: 9) {
                     VStack(spacing: 5) {
-                        Image(systemName: track.2).font(.system(size: 13, weight: .semibold)).foregroundStyle(accent)
-                        Text(track.1).font(.system(size: 8, weight: .heavy)).foregroundStyle(.white.opacity(0.6)).multilineTextAlignment(.center)
+                        Image(systemName: trackIcon(trackIndex)).font(.system(size: 13, weight: .semibold)).foregroundStyle(accent)
+                        Text(trackName(trackIndex)).font(.system(size: 8, weight: .heavy)).foregroundStyle(.white.opacity(0.6)).multilineTextAlignment(.center)
                     }.frame(width: 60).padding(.top, 8)
                     ScrollView(.horizontal) {
                         HStack(spacing: 7) {
-                            ForEach(project.timelineClips.filter { $0.trackIndex == track.0 }) { clip in
+                            ForEach(project.timelineClips.filter { $0.trackIndex == trackIndex }) { clip in
                                 Button {
                                     selectedClipID = clip.id
                                 } label: {
@@ -192,12 +192,12 @@ struct ProjectEditorView: View {
                                         Text(clip.label).font(.system(size: 11, weight: .semibold)).lineLimit(2)
                                         Text(formatTime(clip.duration)).font(.system(size: 9, design: .monospaced)).opacity(0.75)
                                     }
-                                    .foregroundStyle(.white).padding(9).frame(width: max(90, min(190, CGFloat(max(clip.duration, 2)) * 13)), height: 55, alignment: .leading)
+                                    .foregroundStyle(.white).padding(9).frame(width: max(CGFloat(90), min(CGFloat(190), CGFloat(max(clip.duration, 2)) * 13)), height: 55, alignment: .leading)
                                     .background((selectedClipID == clip.id ? accent : colorFor(clip.kind)).opacity(selectedClipID == clip.id ? 0.45 : 0.22), in: RoundedRectangle(cornerRadius: 9))
                                     .overlay(RoundedRectangle(cornerRadius: 9).stroke(selectedClipID == clip.id ? accent : colorFor(clip.kind).opacity(0.55), lineWidth: 1))
                                 }.buttonStyle(.plain)
                             }
-                            if project.timelineClips.filter({ $0.trackIndex == track.0 }).isEmpty {
+                            if project.timelineClips.filter({ $0.trackIndex == trackIndex }).isEmpty {
                                 Text("Arrastra o añade medios aquí").font(.system(size: 10)).foregroundStyle(.white.opacity(0.35)).padding(.vertical, 18)
                             }
                         }
@@ -224,6 +224,14 @@ struct ProjectEditorView: View {
         }
         .padding(15).background(panel, in: RoundedRectangle(cornerRadius: 20))
         .overlay(RoundedRectangle(cornerRadius: 20).stroke(.white.opacity(0.07), lineWidth: 1))
+    }
+
+    private func trackName(_ index: Int) -> String {
+        switch index { case 0: return "VÍDEO"; case 1: return "AUDIO"; case 2: return "IMÁGENES"; default: return "TEXTO / FX" }
+    }
+
+    private func trackIcon(_ index: Int) -> String {
+        switch index { case 0: return "film"; case 1: return "waveform"; case 2: return "photo"; default: return "textformat" }
     }
 
     private func colorFor(_ kind: TimelineClipKind) -> Color {
