@@ -2,11 +2,28 @@ import SwiftUI
 import AVKit
 import UniformTypeIdentifiers
 import AVFoundation
+import PhotosUI
+import CoreTransferable
+
+private struct ImportedMovie: Transferable {
+    let url: URL
+
+    static var transferRepresentation: some TransferRepresentation {
+        FileRepresentation(importedContentType: .movie) { received in
+            let copyURL = FileManager.default.temporaryDirectory
+                .appendingPathComponent(UUID().uuidString + "-" + received.file.lastPathComponent)
+            try FileManager.default.copyItem(at: received.file, to: copyURL)
+            return ImportedMovie(url: copyURL)
+        }
+    }
+}
 
 struct ProjectEditorView: View {
     @State private var project: VideoProject
     @State private var player: AVPlayer?
     @State private var showingImporter = false
+    @State private var showingPhotoPicker = false
+    @State private var selectedPhoto: PhotosPickerItem?
     @State private var importError: String?
     @State private var isPlaying = false
     let onUpdate: (VideoProject) -> Void
@@ -44,7 +61,8 @@ struct ProjectEditorView: View {
                     }
                     previewPanel
                     HStack(spacing: 10) {
-                        toolTile("Importar", detail: "Fotos o Archivos", icon: "plus.rectangle.on.folder") { showingImporter = true }
+                        toolTile("Fotos", detail: "Vídeos de tu fototeca", icon: "photo.on.rectangle") { showingPhotoPicker = true }
+                        toolTile("Archivos", detail: "Explorar ubicaciones", icon: "folder") { showingImporter = true }
                         toolTile("Recortar", detail: "Rango manual", icon: "crop") {}
                         toolTile("Audio", detail: "Herramientas en desarrollo", icon: "waveform") {}
                     }
@@ -102,6 +120,24 @@ struct ProjectEditorView: View {
         }
         .toolbar(.hidden, for: .navigationBar).preferredColorScheme(.dark)
         .fileImporter(isPresented: $showingImporter, allowedContentTypes: [.movie, .video], allowsMultipleSelection: false, onCompletion: handleImport)
+        .photosPicker(isPresented: $showingPhotoPicker, selection: $selectedPhoto, matching: .videos, photoLibrary: .shared)
+        .onChange(of: selectedPhoto) { _, item in
+            guard let item else { return }
+            Task {
+                do {
+                    guard let movie = try await item.loadTransferable(type: ImportedMovie.self) else {
+                        throw NSError(domain: "DreamByteAIStudio.Import", code: 1, userInfo: [NSLocalizedDescriptionKey: "No se pudo leer el vídeo seleccionado."])
+                    }
+                    importVideo(from: movie.url, usesSecurityScope: false)
+                    await MainActor.run { selectedPhoto = nil }
+                } catch {
+                    await MainActor.run {
+                        importError = error.localizedDescription
+                        selectedPhoto = nil
+                    }
+                }
+            }
+        }
         .alert("No se pudo importar", isPresented: Binding(get: { importError != nil }, set: { if !$0 { importError = nil } })) {
             Button("Aceptar", role: .cancel) { importError = nil }
         } message: { Text(importError ?? "Inténtalo de nuevo.") }
@@ -158,15 +194,42 @@ struct ProjectEditorView: View {
     private func handleImport(_ result: Result<[URL], Error>) {
         do {
             guard let pickedURL = try result.get().first else { return }
-            let hasAccess = pickedURL.startAccessingSecurityScopedResource()
-            defer { if hasAccess { pickedURL.stopAccessingSecurityScopedResource() } }
+            importVideo(from: pickedURL, usesSecurityScope: true)
+        } catch {
+            importError = error.localizedDescription
+        }
+    }
+
+    private func importVideo(from sourceURL: URL, usesSecurityScope: Bool) {
+        let hasAccess = usesSecurityScope && sourceURL.startAccessingSecurityScopedResource()
+        defer {
+            if hasAccess { sourceURL.stopAccessingSecurityScopedResource() }
+        }
+
+        do {
             let fm = FileManager.default
             let documents = fm.urls(for: .documentDirectory, in: .userDomainMask)[0]
             let folder = documents.appendingPathComponent("DreamByteMedia", isDirectory: true)
             try fm.createDirectory(at: folder, withIntermediateDirectories: true)
-            let filename = "\(UUID().uuidString)-\(pickedURL.lastPathComponent)"
+            let filename = "\(UUID().uuidString)-\(sourceURL.lastPathComponent)"
             let destination = folder.appendingPathComponent(filename)
-            try fm.copyItem(at: pickedURL, to: destination)
+
+            var coordinationError: NSError?
+            var copyError: Error?
+            NSFileCoordinator(filePresenter: nil).coordinate(
+                readingItemAt: sourceURL,
+                options: [],
+                error: &coordinationError
+            ) { coordinatedURL in
+                do {
+                    try fm.copyItem(at: coordinatedURL, to: destination)
+                } catch {
+                    copyError = error
+                }
+            }
+            if let coordinationError { throw coordinationError }
+            if let copyError { throw copyError }
+
             let asset = AVURLAsset(url: destination)
             Task {
                 do {
@@ -177,13 +240,16 @@ struct ProjectEditorView: View {
                         project.trimStart = 0
                         project.trimEnd = project.duration
                         player = AVPlayer(url: destination)
+                        isPlaying = false
                         onUpdate(project)
                     }
                 } catch {
                     await MainActor.run { importError = error.localizedDescription }
                 }
             }
-        } catch { importError = error.localizedDescription }
+        } catch {
+            importError = error.localizedDescription
+        }
     }
 
     private func formatTime(_ seconds: Double) -> String {
