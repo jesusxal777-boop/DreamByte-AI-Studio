@@ -400,7 +400,7 @@ struct ProjectEditorView: View {
                     let inset = renderSize.width * 0.06
                     overlay.frame = CGRect(x: inset, y: renderSize.height * 0.08, width: renderSize.width - inset * 2, height: renderSize.height * 0.84)
                     overlay.opacity = 0
-                    if clip.kind == .image, let filename = clip.filename, let image = UIImage(contentsOfFile: mediaFolder().appendingPathComponent(filename).path) {
+                    if clip.kind == .image, let filename = clip.filename, let image = UIImage(contentsOfFile: mediaFileURL(filename).path) {
                         overlay.contents = image.cgImage
                         overlay.contentsGravity = .resizeAspect
                         overlay.frame = CGRect(x: renderSize.width * 0.62, y: renderSize.height * 0.58, width: renderSize.width * 0.32, height: renderSize.height * 0.32)
@@ -604,7 +604,7 @@ struct ProjectEditorView: View {
     }
 
     private func addOverlay(_ kind: TimelineClipKind, label: String) {
-        let clip = TimelineClip(label: label, kind: kind, filename: nil, duration: 3, startTime: max(0, previewTime), trackIndex: kind == .audio ? 1 : 3, text: [.text, .subtitle, .sticker].contains(kind) ? label : nil, effectName: kind == .effect ? label : nil, transitionName: kind == .transition ? label : nil)
+        let clip = TimelineClip(label: label, kind: kind, filename: nil, duration: 3, startTime: max(0, previewTime), trackIndex: kind == .audio ? 1 : 3, effectName: kind == .effect ? label : nil, transitionName: kind == .transition ? label : nil, text: [.text, .subtitle, .sticker].contains(kind) ? label : nil)
         project.timelineClips.append(clip)
         selectedClipID = clip.id
         onUpdate(project)
@@ -629,7 +629,7 @@ struct ProjectEditorView: View {
             }
             return
         }
-        AVAudioSession.sharedInstance().requestRecordPermission { granted in
+        AVAudioApplication.requestRecordPermission { granted in
             DispatchQueue.main.async {
                 guard granted else { importError = "Activa el permiso de micrófono en Ajustes para grabar audio."; return }
                 do {
