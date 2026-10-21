@@ -1,0 +1,26 @@
+# Xcode
+DerivedData/
+.build/
+*.xcuserstate
+xcuserdata/
+*.xccheckout
+*.moved-aside
+*.hmap
+*.ipa
+*.dSYM.zip
+*.dSYM
+
+# Secrets and local configuration
+.env
+.env.*
+!.env.example
+Secrets.swift
+*APIKeys*
+*Secrets*
+
+# macOS
+.DS_Store
+
+# Swift Package Manager
+.swiftpm/
+Package.resolved

@@ -1,0 +1,23 @@
+name: iOS Build
+
+on:
+  push:
+    branches: [main, "feature/**"]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  build-ios-simulator:
+    runs-on: macos-15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Select Xcode
+        run: xcode-select -p && xcodebuild -version
+      - name: Install XcodeGen
+        run: brew install xcodegen
+      - name: Generate Xcode project
+        run: xcodegen generate
+      - name: Build for iOS Simulator (no signing)
+        run: xcodebuild -project DreamByteAIStudio.xcodeproj -scheme DreamByteAIStudio -sdk iphonesimulator -configuration Debug CODE_SIGNING_ALLOWED=NO build
