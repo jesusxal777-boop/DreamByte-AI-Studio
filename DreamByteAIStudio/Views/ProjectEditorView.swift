@@ -59,6 +59,12 @@ struct ProjectEditorView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 20) {
                     HStack {
+                        Image("DreamByteLogo")
+                            .resizable()
+                            .scaledToFill()
+                            .frame(width: 42, height: 42)
+                            .clipShape(RoundedRectangle(cornerRadius: 12))
+                            .overlay(RoundedRectangle(cornerRadius: 12).stroke(.white.opacity(0.2), lineWidth: 1))
                         VStack(alignment: .leading, spacing: 4) {
                             Text("EDITOR").font(.system(size: 10, weight: .heavy, design: .rounded)).tracking(2).foregroundStyle(accent)
                             Text(project.name).font(.system(size: 25, weight: .bold, design: .rounded)).foregroundStyle(.white)
@@ -144,6 +150,11 @@ struct ProjectEditorView: View {
 
     private func configurePlayer() {
         guard let url = mediaURL else { return }
+        guard FileManager.default.fileExists(atPath: url.path) else {
+            player = nil
+            importError = "El vídeo de este proyecto ya no está disponible en el almacenamiento de la app. Puedes volver a importarlo desde Medios."
+            return
+        }
         removeTimeObserver()
         let newPlayer = AVPlayer(url: url)
         player = newPlayer

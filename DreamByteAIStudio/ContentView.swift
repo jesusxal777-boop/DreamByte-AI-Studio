@@ -19,7 +19,6 @@ struct ContentView: View {
     @State private var showingSettings = false
     @State private var projectName = ""
     @State private var activeProject: VideoProject?
-    @State private var showingEditor = false
     @State private var scrollOffset: CGFloat = 0
     @State private var searchText = ""
     @State private var selectedFilter = "Todos"
@@ -82,7 +81,6 @@ struct ContentView: View {
                                 ForEach(filteredProjects) { project in
                                     ProjectCard(project: project, onOpen: {
                                         activeProject = project
-                                        showingEditor = true
                                     }, onDelete: { library.delete(project) })
                                 }
                             }
@@ -120,10 +118,8 @@ struct ContentView: View {
             .toolbar(.hidden, for: .navigationBar)
             .sheet(isPresented: $showingCreate) { createProjectSheet }
             .sheet(isPresented: $showingSettings) { AIProviderSettingsView() }
-            .navigationDestination(isPresented: $showingEditor) {
-                if let project = activeProject {
-                    ProjectEditorView(project: project) { library.update($0) }
-                }
+            .navigationDestination(item: $activeProject) { project in
+                ProjectEditorView(project: project) { library.update($0) }
             }
             .onChange(of: showingCreate) { _, isShowing in if !isShowing { projectName = "" } }
             .animation(.spring(response: 0.32, dampingFraction: 0.82), value: scrollOffset < -165)
@@ -134,8 +130,12 @@ struct ContentView: View {
     private var header: some View {
         HStack(spacing: 12) {
             ZStack {
-                RoundedRectangle(cornerRadius: 15).fill(LinearGradient(colors: [DreamGlass.blue, Color(red: 0.08, green: 0.34, blue: 0.78)], startPoint: .topLeading, endPoint: .bottomTrailing)).frame(width: 49, height: 49)
-                Image(systemName: "waveform.path").font(.system(size: 23, weight: .bold)).foregroundStyle(.white)
+                Image("DreamByteLogo")
+                    .resizable()
+                    .scaledToFill()
+                    .frame(width: 49, height: 49)
+                    .clipShape(RoundedRectangle(cornerRadius: 15))
+                    .overlay(RoundedRectangle(cornerRadius: 15).stroke(.white.opacity(0.22), lineWidth: 1))
             }
             VStack(alignment: .leading, spacing: 3) {
                 Text("DreamByte").font(.system(size: 20, weight: .bold, design: .rounded)).foregroundStyle(.white)
@@ -210,7 +210,6 @@ struct ContentView: View {
                         library.add(project)
                         activeProject = project
                         showingCreate = false
-                        showingEditor = true
                     } label: {
                         HStack { Text("Crear y abrir editor"); Spacer(); Image(systemName: "arrow.right") }
                             .font(.system(size: 16, weight: .semibold)).foregroundStyle(.white).padding(17)

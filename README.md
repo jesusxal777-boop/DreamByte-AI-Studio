@@ -23,6 +23,8 @@ The core editor is designed to work independently of AI providers. Importing and
 
 The iOS project is generated with XcodeGen from `project.yml`. GitHub Actions builds an unsigned device app on macOS and packages it as an IPA artifact when the workflow succeeds.
 
+The bundle identifier remains `studios.dreambyte.ai-studio`; this release increments the marketing version to `1.1.0` and the build number to `2`. A signed IPA built with the same Apple Developer Team can update an existing installation without deleting its local project data. The CI artifact is intentionally unsigned, so iOS cannot use it as an in-place update until it is signed with the same team/provisioning identity as the installed build.
+
 ## API key safety
 
 Do not add shared provider keys to source code, build settings, or commits. Users supply their own keys. Keychain reduces exposure but does not guarantee protection on a compromised or instrumented device. API usage may incur provider charges.
