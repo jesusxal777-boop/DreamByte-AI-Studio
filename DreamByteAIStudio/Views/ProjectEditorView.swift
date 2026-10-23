@@ -140,10 +140,12 @@ struct ProjectEditorView: View {
         .alert("No se pudo importar", isPresented: Binding(get: { importError != nil }, set: { if !$0 { importError = nil } })) {
             Button("Aceptar", role: .cancel) { importError = nil }
         } message: { Text(importError ?? "Inténtalo de nuevo.") }
-        .onAppear { configurePlayer() }
+        .task { configurePlayer() }
         .onDisappear {
             player?.pause()
             removeTimeObserver()
+            player = nil
+            isPlaying = false
             onUpdate(project)
         }
     }

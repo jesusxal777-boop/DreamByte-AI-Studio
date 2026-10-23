@@ -118,7 +118,7 @@ struct ContentView: View {
             .toolbar(.hidden, for: .navigationBar)
             .sheet(isPresented: $showingCreate) { createProjectSheet }
             .sheet(isPresented: $showingSettings) { AIProviderSettingsView() }
-            .navigationDestination(item: $activeProject) { project in
+            .fullScreenCover(item: $activeProject) { project in
                 ProjectEditorView(project: project) { library.update($0) }
             }
             .onChange(of: showingCreate) { _, isShowing in if !isShowing { projectName = "" } }
