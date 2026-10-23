@@ -35,6 +35,7 @@ struct ProjectEditorView: View {
     @State private var importError: String?
     @State private var isPlaying = false
     @State private var previewTime: Double = 0
+    @State private var timeObserverToken: Any?
     let onUpdate: (VideoProject) -> Void
 
     private let accent = Color(red: 0.18, green: 0.68, blue: 1.0)
@@ -133,8 +134,51 @@ struct ProjectEditorView: View {
         .alert("No se pudo importar", isPresented: Binding(get: { importError != nil }, set: { if !$0 { importError = nil } })) {
             Button("Aceptar", role: .cancel) { importError = nil }
         } message: { Text(importError ?? "Inténtalo de nuevo.") }
-        .onAppear { if let url = mediaURL { player = AVPlayer(url: url) } }
-        .onDisappear { player?.pause(); onUpdate(project) }
+        .onAppear { configurePlayer() }
+        .onDisappear {
+            player?.pause()
+            removeTimeObserver()
+            onUpdate(project)
+        }
+    }
+
+    private func configurePlayer() {
+        guard let url = mediaURL else { return }
+        removeTimeObserver()
+        let newPlayer = AVPlayer(url: url)
+        player = newPlayer
+        let start = normalizedTrimStart
+        previewTime = start
+        newPlayer.seek(to: CMTime(seconds: start, preferredTimescale: 600))
+        timeObserverToken = newPlayer.addPeriodicTimeObserver(
+            forInterval: CMTime(seconds: 0.1, preferredTimescale: 600),
+            queue: .main
+        ) { time in
+            let seconds = time.seconds
+            guard seconds.isFinite else { return }
+            previewTime = min(max(seconds, normalizedTrimStart), normalizedTrimEnd)
+            if isPlaying && seconds >= normalizedTrimEnd - 0.05 {
+                newPlayer.pause()
+                isPlaying = false
+                newPlayer.seek(to: CMTime(seconds: normalizedTrimStart, preferredTimescale: 600))
+                previewTime = normalizedTrimStart
+            }
+        }
+    }
+
+    private func removeTimeObserver() {
+        if let timeObserverToken, let player {
+            player.removeTimeObserver(timeObserverToken)
+        }
+        timeObserverToken = nil
+    }
+
+    private var normalizedTrimStart: Double {
+        min(max(0, project.trimStart), max(0, project.duration - 0.1))
+    }
+
+    private var normalizedTrimEnd: Double {
+        min(max(normalizedTrimStart + 0.1, project.trimEnd), max(normalizedTrimStart + 0.1, project.duration))
     }
 
     private var editorToolStrip: some View {
@@ -207,7 +251,11 @@ struct ProjectEditorView: View {
                             HStack(spacing: 0) {
                                 ForEach(project.timelineClips.filter { $0.trackIndex == trackIndex }.sorted { $0.startTime < $1.startTime }) { clip in
                                     if clip.startTime > 0 { Color.clear.frame(width: min(2400, CGFloat(clip.startTime) * 22)) }
-                                    Button { selectedClipID = clip.id; previewTime = clip.startTime; player?.seek(to: CMTime(seconds: previewTime, preferredTimescale: 600)) } label: {
+                                    Button {
+                                        selectedClipID = clip.id
+                                        previewTime = min(max(clip.startTime, normalizedTrimStart), normalizedTrimEnd)
+                                        player?.seek(to: CMTime(seconds: previewTime, preferredTimescale: 600))
+                                    } label: {
                                         timelineClipCard(clip)
                                     }.buttonStyle(.plain)
                                 }
@@ -215,7 +263,8 @@ struct ProjectEditorView: View {
                                     Text("+ Añade medios a esta pista").font(.system(size: 10, weight: .medium)).foregroundStyle(.white.opacity(0.34)).padding(.horizontal, 10)
                                 }
                             }.frame(minHeight: 62, alignment: .leading)
-                            Rectangle().fill(accent.opacity(0.85)).frame(width: 1.5, height: 62).offset(x: CGFloat(previewTime) * 22)
+                            Rectangle().fill(accent.opacity(0.85)).frame(width: 1.5, height: 62)
+                                .offset(x: CGFloat(max(0, previewTime - normalizedTrimStart)) * 22)
                         }.frame(minWidth: 500, minHeight: 62)
                     }.scrollIndicators(.hidden)
                 }
@@ -314,6 +363,28 @@ struct ProjectEditorView: View {
         )
     }
 
+    private var trimStartBinding: Binding<Double> {
+        Binding(
+            get: { normalizedTrimStart },
+            set: { newValue in
+                project.trimStart = min(max(0, newValue), max(0, normalizedTrimEnd - 0.1))
+                if previewTime < project.trimStart { previewTime = project.trimStart }
+                onUpdate(project)
+            }
+        )
+    }
+
+    private var trimEndBinding: Binding<Double> {
+        Binding(
+            get: { normalizedTrimEnd },
+            set: { newValue in
+                project.trimEnd = max(normalizedTrimStart + 0.1, min(newValue, project.duration))
+                if previewTime > project.trimEnd { previewTime = project.trimEnd }
+                onUpdate(project)
+            }
+        )
+    }
+
     private func exportTimeline() {
         guard !isExporting, let sourceURL = mediaURL else { return }
         isExporting = true
@@ -351,7 +422,9 @@ struct ProjectEditorView: View {
                     guard let sourceAudio = try await audioAsset.loadTracks(withMediaType: .audio).first else { continue }
                     let audioDuration = try await audioAsset.load(.duration).seconds
                     let clipDuration = min(max(0.1, clip.duration), audioDuration)
-                    let insertionStart = max(0, clip.startTime)
+                    // Los clips se guardan en el reloj del vídeo fuente; al exportar
+                    // deben trasladarse al reloj local del segmento recortado.
+                    let insertionStart = max(0, clip.startTime - start)
                     guard insertionStart < duration else { continue }
                     let usableDuration = min(clipDuration, duration - insertionStart)
                     guard let outputAudio = composition.addMutableTrack(withMediaType: .audio, preferredTrackID: kCMPersistentTrackID_Invalid) else { continue }
@@ -506,7 +579,15 @@ struct ProjectEditorView: View {
             HStack {
                 Button {
                     guard let player else { return }
-                    if isPlaying { player.pause() } else { player.play() }
+                    if isPlaying {
+                        player.pause()
+                    } else {
+                        if previewTime >= normalizedTrimEnd - 0.05 {
+                            previewTime = normalizedTrimStart
+                            player.seek(to: CMTime(seconds: normalizedTrimStart, preferredTimescale: 600))
+                        }
+                        player.play()
+                    }
                     isPlaying.toggle()
                 } label: {
                     Image(systemName: isPlaying ? "pause.fill" : "play.fill").font(.system(size: 14, weight: .bold)).foregroundStyle(.white)
@@ -520,10 +601,24 @@ struct ProjectEditorView: View {
             }.padding(.top, 12)
             HStack(spacing: 10) {
                 Text(formatTime(previewTime)).font(.system(size: 10, weight: .semibold, design: .monospaced)).foregroundStyle(accent)
-                Slider(value: $previewTime, in: 0...max(project.duration, 0.1), step: 0.1) { editing in
+                Slider(value: $previewTime, in: normalizedTrimStart...normalizedTrimEnd, step: 0.1) { editing in
                     if !editing { player?.seek(to: CMTime(seconds: previewTime, preferredTimescale: 600)) }
                 }.tint(accent)
-                Text(formatTime(project.duration)).font(.system(size: 10, design: .monospaced)).foregroundStyle(.white.opacity(0.55))
+                Text(formatTime(normalizedTrimEnd)).font(.system(size: 10, design: .monospaced)).foregroundStyle(.white.opacity(0.55))
+            }.padding(.top, 8)
+            VStack(alignment: .leading, spacing: 6) {
+                HStack {
+                    Text("Recorte del proyecto").font(.caption.weight(.semibold)).foregroundStyle(.white.opacity(0.8))
+                    Spacer()
+                    Text("\(formatTime(normalizedTrimStart)) – \(formatTime(normalizedTrimEnd))")
+                        .font(.caption.monospacedDigit()).foregroundStyle(accent)
+                }
+                HStack(spacing: 10) {
+                    Text("IN").font(.system(size: 9, weight: .bold, design: .monospaced)).foregroundStyle(accent)
+                    Slider(value: trimStartBinding, in: 0...max(0, project.duration - 0.1), step: 0.1).tint(accent)
+                    Text("OUT").font(.system(size: 9, weight: .bold, design: .monospaced)).foregroundStyle(accent)
+                    Slider(value: trimEndBinding, in: 0.1...max(0.1, project.duration), step: 0.1).tint(accent)
+                }
             }.padding(.top, 8)
         }.padding(12).background(panel, in: RoundedRectangle(cornerRadius: 21))
             .overlay(RoundedRectangle(cornerRadius: 21).stroke(.white.opacity(0.08), lineWidth: 1))
@@ -686,13 +781,17 @@ struct ProjectEditorView: View {
                 do {
                     let seconds = try await asset.load(.duration).seconds
                     await MainActor.run {
+                        // El proyecto usa un vídeo fuente principal; reemplazarlo
+                        // evita que la biblioteca muestre una pista que no puede
+                        // participar en la exportación actual.
+                        project.timelineClips.removeAll { $0.kind == .video }
                         project.sourceVideoFilename = filename
                         project.duration = seconds.isFinite ? max(seconds, 0) : 0
                         project.trimStart = 0
                         project.trimEnd = project.duration
                         project.timelineClips.append(TimelineClip(label: destination.deletingPathExtension().lastPathComponent, kind: .video, filename: filename, duration: project.duration, startTime: 0, trackIndex: 0))
-                        player = AVPlayer(url: destination)
                         isPlaying = false
+                        configurePlayer()
                         onUpdate(project)
                     }
                 } catch {
